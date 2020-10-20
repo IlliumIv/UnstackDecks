@@ -1,4 +1,5 @@
-﻿using System.Collections;
+﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
@@ -7,6 +8,7 @@ using ExileCore;
 using ExileCore.PoEMemory.MemoryObjects;
 using ExileCore.Shared;
 using ExileCore.Shared.Enums;
+using SharpDX;
 using Input = ExileCore.Input;
 using Point = SharpDX.Point;
 using RectangleF = SharpDX.RectangleF;
@@ -21,29 +23,60 @@ namespace UnstackDecks
         private List<ServerInventory.InventSlotItem> _SlotsWithStackedDecks;
         private RectangleF _InventoryRect;
         private float _CellSize;
-        
-        private readonly WaitTime wait1ms = new WaitTime(1);
+
+        private readonly WaitTime _Wait1ms = new WaitTime(1);
+        private WaitTime _WaitUserDefined = new WaitTime(0);
+        private WaitTime _WaitBetweenClicks = new WaitTime(40);
 
         private Coroutine _UnstackCoroutine;
         private uint _CoroutineIterations;
-        
+
         public UnstackDecks()
         {
-            Name = "Unstack Decks";
+            Name = "UnstackDecks";
         }
 
         public override bool Initialise()
         {
+            base.Initialise();
+
             Input.RegisterKey(Settings.UnstackHotkey.Value);
 
-            Settings.UnstackHotkey.OnValueChanged += () => { Input.RegisterKey(Settings.UnstackHotkey); };
+            Settings.Enable.OnValueChanged += (sender, value) => { _SaveSettings(); };
+            Settings.PreserveOriginalCursorPosition.OnValueChanged += (sender, value) => { _SaveSettings(); };
+            Settings.ReverseMouseButtons.OnValueChanged += (sender, value) => { _SaveSettings(); };
 
-            Settings.MouseSpeed.OnValueChanged += (sender, f) => { Mouse.speedMouse = Settings.MouseSpeed.Value; };
+            Settings.UnstackHotkey.OnValueChanged += () =>
+            {
+                Input.RegisterKey(Settings.UnstackHotkey);
+                _SaveSettings();
+            };
+
+            Settings.ExtraDelay.OnValueChanged += (sender, value) =>
+            {
+                _WaitUserDefined = new WaitTime(Settings.ExtraDelay.Value);
+                _SaveSettings();
+            };
+
+            Settings.MouseSpeed.OnValueChanged += (sender, f) =>
+            {
+                Mouse.speedMouse = Settings.MouseSpeed.Value;
+                _SaveSettings();
+            };
+
+            Settings.TimeBetweenClicks.OnValueChanged += (sender, i) =>
+            {
+                _WaitBetweenClicks = new WaitTime(Settings.TimeBetweenClicks);
+                _SaveSettings();
+            };
+
             return true;
         }
 
         public override void Render()
         {
+            base.Render();
+
             if (_UnstackCoroutine != null && _UnstackCoroutine.IsDone)
             {
                 _UnstackCoroutine = null;
@@ -60,13 +93,13 @@ namespace UnstackDecks
             if (_UnstackCoroutine != null && _UnstackCoroutine.Running && _DebugTimer.ElapsedMilliseconds > 5000)
             {
                 _UnstackCoroutine?.Done();
-                _DebugTimer.Restart(); 
+                _DebugTimer.Restart();
                 _DebugTimer.Stop();
             }
 
             if (!Settings.UnstackHotkey.PressedOnce()) return;
             if (!requiredPanelsOpen) return;
-            
+
             _UnstackCoroutine = new Coroutine(UnstackTheDecks(), this, Name);
 
             Core.ParallelRunner.Run(_UnstackCoroutine);
@@ -85,7 +118,7 @@ namespace UnstackDecks
 
             if (Settings.PreserveOriginalCursorPosition)
             {
-                yield return Input.SetCursorPositionSmooth(new SharpDX.Vector2(originalCursorPosition.X,
+                yield return SmoothlyMoveCursor(new Vector2(originalCursorPosition.X,
                     originalCursorPosition.Y));
                 Input.MouseMove();
             }
@@ -114,7 +147,7 @@ namespace UnstackDecks
                 // ignored
             }
 
-            yield return wait1ms;
+            yield return _Wait1ms;
         }
 
         private static int[,] GetInventoryLayout(IEnumerable<ServerInventory.InventSlotItem> slots)
@@ -157,11 +190,14 @@ namespace UnstackDecks
                 {
                     if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
                     {
-                        DebugWindow.LogError("UnstackDecks => Inventory doesn't have space to place the next div card.");
-                        yield return wait1ms;
+                        _UnstackCoroutine?.Done();
                     }
-                    
-                    yield return PopStack(slot.GetClientRect().Center, GetClientRectFromPoint(openSlotPos, 1, 1).Center);
+                    else
+                    {
+                        yield return PopStack(slot.GetClientRect().Center,
+                            GetClientRectFromPoint(openSlotPos, 1, 1).Center);
+                    }
+
                     --stackSize;
                     ++_CoroutineIterations;
                     _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
@@ -170,48 +206,58 @@ namespace UnstackDecks
                 if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
                 {
                     DebugWindow.LogError("UnstackDecks => Inventory doesn't have space to place the next div card.");
-                    yield return wait1ms;
+                    _UnstackCoroutine?.Done();
+                    ++_CoroutineIterations;
+                    _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
                 }
-
-                yield return PopStack(slot.GetClientRect().Center, slot.GetClientRect().Center);
-                ++_CoroutineIterations;
-                _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
+                else
+                {
+                    yield return PopStack(slot.GetClientRect().Center, slot.GetClientRect().Center);
+                }
             }
-            ++_CoroutineIterations;
-            _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
         }
 
-        private IEnumerator PopStack(SharpDX.Vector2 source, SharpDX.Vector2 destination)
+        private IEnumerator SmoothlyMoveCursor(Vector2 to)
+        {
+            var step = Math.Max(Vector2.Distance(Input.ForceMousePosition, to) / 100, 4);
+
+            for (var i = 0; i < step; i++)
+            {
+                Input.SetCursorPos(Vector2.SmoothStep(Input.ForceMousePosition, to, i / step));
+                Input.MouseMove();
+                yield return _Wait1ms;
+            }
+        }
+
+        private IEnumerator PopStack(Vector2 source, Vector2 destination)
         {
             //var cursorInventory = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
-            var delay = new WaitTime((int) GameController.Game.IngameState.CurLatency * 2 + Settings.ExtraDelay);
+            var delay = new WaitTime((int) GameController.Game.IngameState.CurLatency * 2 + _WaitUserDefined.Milliseconds);
 
-            //while (cursorInventory.Items.Count == 0)
+            //if (cursorInventory.Items.Count == 0)
             {
-                yield return Input.SetCursorPositionSmooth(source);
+                yield return SmoothlyMoveCursor(source);
                 yield return delay;
 
-                Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Left: MouseButtons.Right);
+                Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right);
                 Input.MouseMove();
-                yield return delay;
+                yield return _WaitBetweenClicks;
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
             }
 
-            yield return delay;
-            //while (cursorInventory.Items.Count == 1)
+            //if (cursorInventory.Items.Count == 1)
             {
-                yield return Input.SetCursorPositionSmooth(destination);
+                yield return SmoothlyMoveCursor(destination);
                 yield return delay;
 
                 Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left);
                 Input.MouseMove();
-                yield return delay;
+                yield return _WaitBetweenClicks;
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
             }
         }
-
 
         #region Adding / Removing Entities
 
