@@ -2,7 +2,7 @@
 
 Scans your inventory for stacks of Stacked Deck items and unstacks them into Divination cards. 
 
-**Note - This has been minimally tested as I have don't have many stacked decks to test with and I play in a non-trade league.**
+**Note - This has been minimally tested as I don't have many stacked decks to test with and I play in a non-trade league.**
 
 ## Usage
 
