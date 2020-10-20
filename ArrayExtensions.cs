@@ -1,3 +1,4 @@
+using System.Windows.Forms.VisualStyles;
 using ExileCore;
 using SharpDX;
 
@@ -5,6 +6,14 @@ namespace UnstackDecks
 {
     internal static class ArrayExtensions
     {
+        public static void Fill(this int[,] matrix, int value, SharpDX.Vector2 pos)
+        {
+            if (pos.X < 0 || pos.Y < 0 || pos.X >= matrix.GetLength(1) && pos.Y < matrix.GetLength(0))
+            {
+                matrix[(int) pos.Y, (int) pos.X] = value;
+            }
+        }
+
         public static void Fill(this int[,] matrix, int value, int col, int row, int width, int height)
         {
             for (var r = row; r < row + height; r++)
@@ -21,7 +30,7 @@ namespace UnstackDecks
 
         public static bool GetNextOpenSlot(this int[,] matrix, ref Point start)
         {
-            if (start.X < 0 || start.Y < 0 || start.X >= matrix.GetLength(0) || start.Y >= matrix.GetLength(1)) 
+            if (start.X < 0 || start.Y < 0 || start.X >= matrix.GetLength(1) || start.Y >= matrix.GetLength(0)) 
             {
                 start.X = -1;
                 start.Y = -1;

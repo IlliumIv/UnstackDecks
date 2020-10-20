@@ -23,6 +23,8 @@ namespace UnstackDecks
         private List<ServerInventory.InventSlotItem> _SlotsWithStackedDecks;
         private RectangleF _InventoryRect;
         private float _CellSize;
+        private float _PixelsPerStep = 100.0f;
+        private float _MouseSpeed;
 
         private readonly WaitTime _Wait1ms = new WaitTime(1);
         private WaitTime _WaitUserDefined = new WaitTime(0);
@@ -58,12 +60,14 @@ namespace UnstackDecks
                 _SaveSettings();
             };
 
+            _MouseSpeed = _PixelsPerStep * Settings.MouseSpeed.Value;
             Settings.MouseSpeed.OnValueChanged += (sender, f) =>
             {
-                Mouse.speedMouse = Settings.MouseSpeed.Value;
+                _MouseSpeed = _PixelsPerStep * Settings.MouseSpeed.Value;
                 _SaveSettings();
             };
 
+            _WaitBetweenClicks = new WaitTime(Settings.TimeBetweenClicks.Value);
             Settings.TimeBetweenClicks.OnValueChanged += (sender, i) =>
             {
                 _WaitBetweenClicks = new WaitTime(Settings.TimeBetweenClicks);
@@ -190,36 +194,37 @@ namespace UnstackDecks
                 {
                     if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
                     {
-                        _UnstackCoroutine?.Done();
-                    }
-                    else
-                    {
-                        yield return PopStack(slot.GetClientRect().Center,
-                            GetClientRectFromPoint(openSlotPos, 1, 1).Center);
+                        DebugWindow.LogError(
+                            "UnstackDecks => Inventory doesn't have space to place the next div card.");
+                        yield break;
                     }
 
+                    yield return PopStack(slot.GetClientRect().Center,
+                        GetClientRectFromPoint(openSlotPos, 1, 1).Center);
                     --stackSize;
                     ++_CoroutineIterations;
                     _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
+
+                    _InventoryLayout.Fill(1, openSlotPos);
                 }
 
                 if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
                 {
                     DebugWindow.LogError("UnstackDecks => Inventory doesn't have space to place the next div card.");
-                    _UnstackCoroutine?.Done();
-                    ++_CoroutineIterations;
-                    _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
+                    yield break;
                 }
-                else
-                {
-                    yield return PopStack(slot.GetClientRect().Center, slot.GetClientRect().Center);
-                }
+
+                yield return PopStack(slot.GetClientRect().Center, slot.GetClientRect().Center);
+                ++_CoroutineIterations;
+                _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
+
+                _InventoryLayout.Fill(1, openSlotPos);
             }
         }
 
         private IEnumerator SmoothlyMoveCursor(Vector2 to)
         {
-            var step = Math.Max(Vector2.Distance(Input.ForceMousePosition, to) / 100, 4);
+            var step = Math.Max(Vector2.Distance(Input.ForceMousePosition, to) / _MouseSpeed, 4);
 
             for (var i = 0; i < step; i++)
             {
@@ -231,28 +236,30 @@ namespace UnstackDecks
 
         private IEnumerator PopStack(Vector2 source, Vector2 destination)
         {
-            //var cursorInventory = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
-            var delay = new WaitTime((int) GameController.Game.IngameState.CurLatency * 2 + _WaitUserDefined.Milliseconds);
+            var cursorInventory = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
+            var delay = new WaitTime((int) GameController.Game.IngameState.CurLatency * 2 +
+                                     _WaitUserDefined.Milliseconds);
 
-            //if (cursorInventory.Items.Count == 0)
+            for (var attempt = 0; cursorInventory.Items.Count == 0; ++attempt)
             {
-                yield return SmoothlyMoveCursor(source);
-                yield return delay;
+                if (attempt > 3) yield break;
 
+                yield return SmoothlyMoveCursor(source);
+                
                 Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right);
-                Input.MouseMove();
                 yield return _WaitBetweenClicks;
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
             }
 
-            //if (cursorInventory.Items.Count == 1)
+            for (var attempt = 0; cursorInventory.Items.Count == 1; ++attempt)
             {
+                if (attempt > 3) yield break;
+                
                 yield return SmoothlyMoveCursor(destination);
                 yield return delay;
 
                 Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left);
-                Input.MouseMove();
                 yield return _WaitBetweenClicks;
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
