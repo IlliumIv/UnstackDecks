@@ -199,26 +199,24 @@ namespace UnstackDecks
                         yield break;
                     }
 
-                    yield return PopStack(slot.GetClientRect().Center,
-                        GetClientRectFromPoint(openSlotPos, 1, 1).Center);
-                    --stackSize;
                     ++_CoroutineIterations;
                     _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
 
+                    yield return PopStack(slot.GetClientRect().Center,
+                        GetClientRectFromPoint(openSlotPos, 1, 1).Center);
+                    --stackSize;
+                    
                     _InventoryLayout.Fill(1, openSlotPos);
-                }
+                    ++_CoroutineIterations;
+                    _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
 
-                if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
-                {
-                    DebugWindow.LogError("UnstackDecks => Inventory doesn't have space to place the next div card.");
-                    yield break;
                 }
 
                 yield return PopStack(slot.GetClientRect().Center, slot.GetClientRect().Center);
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
 
-                _InventoryLayout.Fill(1, openSlotPos);
+                _InventoryLayout.Fill(1, slot.PosX, slot.PosY);
             }
         }
 
@@ -242,24 +240,37 @@ namespace UnstackDecks
 
             for (var attempt = 0; cursorInventory.Items.Count == 0; ++attempt)
             {
-                if (attempt > 3) yield break;
+                if (attempt > 5)
+                {
+                    DebugWindow.LogError("Exceeded attempts to pickup div card.");
+                    yield break;
+                }
 
                 yield return SmoothlyMoveCursor(source);
-                
+                yield return delay;
+
                 Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right);
+                Input.MouseMove();
                 yield return _WaitBetweenClicks;
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
             }
 
+            yield return delay;
+
             for (var attempt = 0; cursorInventory.Items.Count == 1; ++attempt)
             {
-                if (attempt > 3) yield break;
-                
+                if (attempt > 5)
+                {
+                    DebugWindow.LogError("Exceeded attempts to drop div card.");
+                    yield break;
+                }
+
                 yield return SmoothlyMoveCursor(destination);
                 yield return delay;
 
                 Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left);
+                Input.MouseMove();
                 yield return _WaitBetweenClicks;
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
