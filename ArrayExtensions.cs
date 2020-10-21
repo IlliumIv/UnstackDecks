@@ -48,6 +48,7 @@ namespace UnstackDecks
                 {
                     if (matrix[start.Y, start.X] == 0)
                     {
+                        matrix[start.Y, start.X] = 1;
                         return true;
                     }
                 }

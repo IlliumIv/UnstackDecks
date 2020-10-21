@@ -182,44 +182,6 @@ namespace UnstackDecks
                 height * _CellSize);
         }
 
-        private IEnumerator PopTheStacks()
-        {
-            var openSlotPos = Point.Zero;
-
-            foreach (var slot in _SlotsWithStackedDecks)
-            {
-                var stackSize = slot.Item.GetComponent<Stack>().Size;
-
-                while (stackSize > 1)
-                {
-                    if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
-                    {
-                        DebugWindow.LogError(
-                            "UnstackDecks => Inventory doesn't have space to place the next div card.");
-                        yield break;
-                    }
-
-                    ++_CoroutineIterations;
-                    _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
-
-                    yield return PopStack(slot.GetClientRect().Center,
-                        GetClientRectFromPoint(openSlotPos, 1, 1).Center);
-                    --stackSize;
-                    
-                    _InventoryLayout.Fill(1, openSlotPos);
-                    ++_CoroutineIterations;
-                    _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
-
-                }
-
-                yield return PopStack(slot.GetClientRect().Center, slot.GetClientRect().Center);
-                ++_CoroutineIterations;
-                _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
-
-                _InventoryLayout.Fill(1, slot.PosX, slot.PosY);
-            }
-        }
-
         private IEnumerator SmoothlyMoveCursor(Vector2 to)
         {
             var step = Math.Max(Vector2.Distance(Input.ForceMousePosition, to) / _MouseSpeed, 4);
@@ -232,49 +194,70 @@ namespace UnstackDecks
             }
         }
 
-        private IEnumerator PopStack(Vector2 source, Vector2 destination)
+
+        private IEnumerator MarkSlotUsed(Vector2 slotPosition)
         {
-            var cursorInventory = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
+            _InventoryLayout.Fill(1, slotPosition);
+            yield return _Wait1ms;
+        }
+
+        private IEnumerator PopTheStacks()
+        {
+            var openSlotPos = Point.Zero;
+
+            foreach (var slot in _SlotsWithStackedDecks)
+            {
+                var stackSize = slot.Item.GetComponent<Stack>().Size;
+                var slotRectCenter = slot.GetClientRect().Center;
+
+                while (stackSize > 1)
+                {
+                    if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
+                    {
+                        DebugWindow.LogError(
+                            "UnstackDecks => Inventory doesn't have space to place the next div card.");
+                        yield break;
+                    }
+
+                    yield return SmoothlyMoveCursor(slotRectCenter);
+                    yield return PickUpCard();
+                    yield return SmoothlyMoveCursor(GetClientRectFromPoint(openSlotPos, 1, 1).Center);
+                    yield return _WaitBetweenClicks;
+                    yield return DropOffCard();
+                    yield return MarkSlotUsed(openSlotPos);
+                    --stackSize;
+
+                    ++_CoroutineIterations;
+                    _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
+                }
+
+                yield return SmoothlyMoveCursor(slotRectCenter);
+                yield return PickUpCard();
+                yield return _WaitBetweenClicks;
+                yield return DropOffCard();
+                yield return MarkSlotUsed(slot.InventoryPosition);
+                
+                ++_CoroutineIterations;
+                _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
+            }
+        }
+
+        
+        private IEnumerator PickUpCard()
+        {
+            //var cursorInventory = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
             var delay = new WaitTime((int) GameController.Game.IngameState.CurLatency * 2 +
                                      _WaitUserDefined.Milliseconds);
 
-            for (var attempt = 0; cursorInventory.Items.Count == 0; ++attempt)
-            {
-                if (attempt > 5)
-                {
-                    DebugWindow.LogError("Exceeded attempts to pickup div card.");
-                    yield break;
-                }
+            Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right);
+            Input.MouseMove();
+            yield return _Wait1ms;
+        }
 
-                yield return SmoothlyMoveCursor(source);
-                yield return delay;
-
-                Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right);
-                Input.MouseMove();
-                yield return _WaitBetweenClicks;
-                ++_CoroutineIterations;
-                _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
-            }
-
-            yield return delay;
-
-            for (var attempt = 0; cursorInventory.Items.Count == 1; ++attempt)
-            {
-                if (attempt > 5)
-                {
-                    DebugWindow.LogError("Exceeded attempts to drop div card.");
-                    yield break;
-                }
-
-                yield return SmoothlyMoveCursor(destination);
-                yield return delay;
-
-                Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left);
-                Input.MouseMove();
-                yield return _WaitBetweenClicks;
-                ++_CoroutineIterations;
-                _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
-            }
+        private IEnumerator DropOffCard() {
+            Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left);
+            Input.MouseMove();
+            yield return _Wait1ms;
         }
 
         #region Adding / Removing Entities
