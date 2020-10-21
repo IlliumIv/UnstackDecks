@@ -11,9 +11,8 @@ namespace UnstackDecks
         {
             Enable = new ToggleNode(true);
             UnstackHotkey = Keys.F1;
-            ExtraDelay = new RangeNode<int>(0, 0, 200);
             TimeBetweenClicks = new RangeNode<int>(20, 20, 200);
-            MouseSpeed = new RangeNode<float>(1, 0.1f, 5);
+            MouseSpeed = new RangeNode<float>(1, 0.1f, 2);
             PreserveOriginalCursorPosition = new ToggleNode(false);
             ReverseMouseButtons = new ToggleNode(false);
         }
@@ -22,8 +21,6 @@ namespace UnstackDecks
         public ToggleNode Enable { get; set; }   
         [Menu("Hotkey", "Hotkey to be pressed to start unstacking.")]
         public HotkeyNode UnstackHotkey { get; set; }
-        [Menu("Extra Delay", "Delay between each major action")]
-        public RangeNode<int> ExtraDelay { get; set; }
         [Menu("Time Between Clicks", "Minimum time (ms) between clicks.")]
         public RangeNode<int> TimeBetweenClicks { get; set; }
         [Menu("Mouse Speed", "The pace the mouse moves between locations.")]

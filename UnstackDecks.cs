@@ -10,7 +10,6 @@ using ExileCore.Shared;
 using ExileCore.Shared.Enums;
 using SharpDX;
 using Input = ExileCore.Input;
-using Point = SharpDX.Point;
 using RectangleF = SharpDX.RectangleF;
 using Stack = ExileCore.PoEMemory.Components.Stack;
 
@@ -54,27 +53,27 @@ namespace UnstackDecks
                 _SaveSettings();
             };
 
-            Settings.ExtraDelay.OnValueChanged += (sender, value) =>
-            {
-                _WaitUserDefined = new WaitTime(Settings.ExtraDelay.Value);
-                _SaveSettings();
-            };
-
-            _MouseSpeed = _PixelsPerStep * Settings.MouseSpeed.Value;
+            _MouseSpeed = _PixelsPerStep * Clamp(Settings.MouseSpeed.Value, 0.1f, 2.0f);
             Settings.MouseSpeed.OnValueChanged += (sender, f) =>
             {
-                _MouseSpeed = _PixelsPerStep * Settings.MouseSpeed.Value;
+                _MouseSpeed = _PixelsPerStep * Clamp(Settings.MouseSpeed.Value, 0.1f, 2.0f);
                 _SaveSettings();
             };
 
-            _WaitBetweenClicks = new WaitTime(Settings.TimeBetweenClicks.Value);
+            _WaitBetweenClicks = new WaitTime(Clamp(Settings.TimeBetweenClicks.Value, 20, 200));
             Settings.TimeBetweenClicks.OnValueChanged += (sender, i) =>
             {
-                _WaitBetweenClicks = new WaitTime(Settings.TimeBetweenClicks);
+                _WaitBetweenClicks = new WaitTime(Clamp(Settings.TimeBetweenClicks, 20, 200));
                 _SaveSettings();
             };
 
             return true;
+        }
+
+        private static T Clamp<T>(T value, T min, T max) where T : IComparable<T>
+        {
+            if (value.CompareTo(min) < 0) return min;
+            return value.CompareTo(max) > 0 ? max : value;
         }
 
         public override void Render()
