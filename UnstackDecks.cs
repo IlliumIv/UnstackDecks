@@ -87,17 +87,21 @@ namespace UnstackDecks
 
             var requiredPanelsOpen = GameController.Game.IngameState.IngameUi.InventoryPanel.IsVisible;
 
-            if (!requiredPanelsOpen && _UnstackCoroutine != null && !_UnstackCoroutine.IsDone)
+            if (_UnstackCoroutine != null && _UnstackCoroutine.Running)
             {
-                _UnstackCoroutine = Core.ParallelRunner.FindByName(Name);
-                _UnstackCoroutine?.Done();
-            }
+                if (_DebugTimer.ElapsedMilliseconds > 15000)
+                {
+                    DebugWindow.LogError(
+                        "Unstacking the current stacked deck has reached the time limit for an operation.");
+                    StopCoroutine();
+                }
 
-            if (_UnstackCoroutine != null && _UnstackCoroutine.Running && _DebugTimer.ElapsedMilliseconds > 5000)
-            {
-                _UnstackCoroutine?.Done();
-                _DebugTimer.Restart();
-                _DebugTimer.Stop();
+                if (!requiredPanelsOpen || Input.GetKeyState(Keys.Escape))
+                {
+                    StopCoroutine();
+                }
+
+                return;
             }
 
             if (!Settings.UnstackHotkey.PressedOnce()) return;
@@ -108,6 +112,14 @@ namespace UnstackDecks
             Core.ParallelRunner.Run(_UnstackCoroutine);
         }
 
+        private void StopCoroutine()
+        {
+            _UnstackCoroutine = Core.ParallelRunner.FindByName(Name);
+            _UnstackCoroutine?.Done();
+            _DebugTimer.Restart();
+            _DebugTimer.Stop();
+        }
+
         private IEnumerator UnstackTheDecks()
         {
             _DebugTimer.Restart();
@@ -116,11 +128,13 @@ namespace UnstackDecks
             var originalCursorPosition = Input.ForceMousePosition;
             if (_SlotsWithStackedDecks.Count > 0)
             {
+                _DebugTimer.Restart();
                 yield return PopTheStacks();
             }
 
             if (Settings.PreserveOriginalCursorPosition)
             {
+                _DebugTimer.Restart();
                 yield return SmoothlyMoveCursor(new Vector2(originalCursorPosition.X,
                     originalCursorPosition.Y));
                 Input.MouseMove();
@@ -128,7 +142,6 @@ namespace UnstackDecks
 
             _UnstackCoroutine = Core.ParallelRunner.FindByName(Name);
             _UnstackCoroutine?.Done();
-
             _DebugTimer.Stop();
         }
 
@@ -206,8 +219,12 @@ namespace UnstackDecks
 
             foreach (var slot in _SlotsWithStackedDecks)
             {
+                yield return _Wait1ms;
                 var stackSize = slot.Item.GetComponent<Stack>().Size;
                 var slotRectCenter = slot.GetClientRect().Center;
+                yield return _Wait1ms;
+
+                _DebugTimer.Restart();
 
                 while (stackSize > 1)
                 {
@@ -220,11 +237,15 @@ namespace UnstackDecks
 
                     yield return SmoothlyMoveCursor(slotRectCenter);
                     yield return PickUpCard();
-                    yield return SmoothlyMoveCursor(GetClientRectFromPoint(openSlotPos, 1, 1).Center);
                     yield return _WaitBetweenClicks;
+
+                    yield return SmoothlyMoveCursor(GetClientRectFromPoint(openSlotPos, 1, 1).Center);
                     yield return DropOffCard();
+                    yield return _WaitBetweenClicks;
+
                     yield return MarkSlotUsed(openSlotPos);
                     --stackSize;
+                    yield return _Wait1ms;
 
                     ++_CoroutineIterations;
                     _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
@@ -233,27 +254,25 @@ namespace UnstackDecks
                 yield return SmoothlyMoveCursor(slotRectCenter);
                 yield return PickUpCard();
                 yield return _WaitBetweenClicks;
+
                 yield return DropOffCard();
-                yield return MarkSlotUsed(slot.InventoryPosition);
-                
+                yield return _WaitBetweenClicks;
+
                 ++_CoroutineIterations;
                 _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
             }
         }
 
-        
+
         private IEnumerator PickUpCard()
         {
-            //var cursorInventory = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
-            var delay = new WaitTime((int) GameController.Game.IngameState.CurLatency * 2 +
-                                     _WaitUserDefined.Milliseconds);
-
             Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right);
             Input.MouseMove();
             yield return _Wait1ms;
         }
 
-        private IEnumerator DropOffCard() {
+        private IEnumerator DropOffCard()
+        {
             Input.Click(Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left);
             Input.MouseMove();
             yield return _Wait1ms;
