@@ -15,6 +15,7 @@ namespace UnstackDecks
             MouseSpeed = new RangeNode<float>(1, 0.1f, 2);
             PreserveOriginalCursorPosition = new ToggleNode(false);
             ReverseMouseButtons = new ToggleNode(false);
+            DropToGround = new ToggleNode(false);
         }
 
         [Menu("Enable", "Enables listening for hotkey to unstack.")]
@@ -29,5 +30,6 @@ namespace UnstackDecks
         public ToggleNode PreserveOriginalCursorPosition { get; set; }
         [Menu("Reverse mouse buttons", "Right-click to unstack is the default. If you have left-handed mouse, use this.")]
         public ToggleNode ReverseMouseButtons { get; set; }
+        public ToggleNode DropToGround { get; set; }
     }
 }

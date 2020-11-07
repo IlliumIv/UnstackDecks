@@ -106,7 +106,7 @@ namespace UnstackDecks
 
             if (!Settings.UnstackHotkey.PressedOnce()) return;
             if (!requiredPanelsOpen) return;
-
+            if (Settings.DropToGround && (GameController.Area.CurrentArea.IsHideout || GameController.Area.CurrentArea.IsTown)) return;
             _UnstackCoroutine = new Coroutine(UnstackTheDecks(), this, Name);
 
             Core.ParallelRunner.Run(_UnstackCoroutine);
@@ -216,36 +216,40 @@ namespace UnstackDecks
         private IEnumerator PopTheStacks()
         {
             var openSlotPos = Point.Zero;
-
             foreach (var slot in _SlotsWithStackedDecks)
             {
                 //yield return _Wait1ms;
                 var stackSize = slot.Item.GetComponent<Stack>()?.Size ?? 0;
                 var slotRectCenter = slot.GetClientRect().Center;
-                //yield return _Wait1ms;
 
                 _DebugTimer.Restart();
 
                 while (stackSize <= 10 && stackSize >= 1)
                 {
-                    if (!_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
+                    if (!Settings.DropToGround && !_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
                     {
                         DebugWindow.LogError(
                             "UnstackDecks => Inventory doesn't have space to place the next div card.");
                         yield break;
                     }
                     //right click the stackdeck stack aka PickUpCard()
-                    yield return Input.SetCursorPositionAndClick(slotRectCenter, MouseButtons.Right, Settings.TimeBetweenClicks);
+                    yield return Input.SetCursorPositionAndClick(slotRectCenter, Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right, Settings.TimeBetweenClicks);
                     //check if MouseInventory contains an item and waits for it
                     yield return new WaitFunctionTimed(() => GameController.IngameState.IngameUi.Cursor.ChildCount == 1, true);
-                    //drop off the item from cursor at free inventory slot
-                    yield return Input.SetCursorPositionAndClick(GetClientRectFromPoint(openSlotPos, 1, 1).Center, MouseButtons.Left, Settings.TimeBetweenClicks);
+                    if (Settings.DropToGround)
+                    {
+                        yield return Input.SetCursorPositionAndClick(GameController.Window.GetWindowRectangle().Center, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+                    }
+                    else
+                    {
+                        //drop off the item from cursor at free inventory slot
+                        yield return Input.SetCursorPositionAndClick(GetClientRectFromPoint(openSlotPos, 1, 1).Center, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+                    }
+                    
                     //wait for item to be dropped off
                     yield return new WaitFunctionTimed(() => GameController.IngameState.IngameUi.Cursor.ChildCount == 0, true);
-                    yield return MarkSlotUsed(openSlotPos);
+                    if(!Settings.DropToGround) yield return MarkSlotUsed(openSlotPos);
 
-                    //is our stacksize still valid ?
-                    //stackSize = slot.Item.GetComponent<Stack>()?.Size ?? 0; for some weird ass reason thats an issue
                     --stackSize;
                     ++_CoroutineIterations;
                     _UnstackCoroutine?.UpdateTicks(_CoroutineIterations);
