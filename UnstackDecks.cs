@@ -226,7 +226,7 @@ namespace UnstackDecks
 
                 while (stackSize <= 10 && stackSize >= 1)
                 {
-                    if (!Settings.DropToGround && !_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
+                    if (!Settings.DropToGround && !Settings.DropToDivTab && !_InventoryLayout.GetNextOpenSlot(ref openSlotPos))
                     {
                         DebugWindow.LogError(
                             "UnstackDecks => Inventory doesn't have space to place the next div card.");
@@ -247,7 +247,7 @@ namespace UnstackDecks
                         if(GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.IsVisible &&
                             GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.InvType == InventoryType.DivinationStash)
                         {
-                            yield return Input.SetCursorPositionAndClick(GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.GetClientRect().Center, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+                            yield return Input.SetCursorPositionAndClick(GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.GetClientRectCache.Center, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
                         }
                         else
                         {
