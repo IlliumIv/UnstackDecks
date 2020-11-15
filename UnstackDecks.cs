@@ -156,8 +156,8 @@ namespace UnstackDecks
                         .GetClientRect();
                 _CellSize = _InventoryRect.Width / playerInventory.Columns;
                 _SlotsWithStackedDecks = playerInventory.InventorySlotItems.Where(slot =>
-                    GameController.Files.BaseItemTypes.Translate(slot.Item.Path).BaseName == "Stacked Deck").ToList();
-            }
+                    GameController.Files.BaseItemTypes.Translate(slot.Item.Path).BaseName == "Stacked Deck").ToList().OrderBy(x => x.InventoryPosition.X).ThenBy(x => x.InventoryPosition.Y).ToList();
+            }   //OrderBy<ServerInventory.InventSlotItem>(x => x.InventoryPosition);
             catch
             {
                 // ignored
@@ -188,10 +188,10 @@ namespace UnstackDecks
         private RectangleF GetClientRectFromPoint(Point pos, int width, int height)
         {
             return new RectangleF(
-                _InventoryRect.X + _CellSize * pos.X,
-                _InventoryRect.Y + _CellSize * pos.Y,
-                width * _CellSize,
-                height * _CellSize);
+                _InventoryRect.X + pos.X + _CellSize * pos.X,
+                _InventoryRect.Y + pos.Y + _CellSize * pos.Y,
+                pos.X + width * _CellSize,
+                pos.Y + height * _CellSize);
         }
 
         private IEnumerator SmoothlyMoveCursor(Vector2 to)
@@ -232,13 +232,27 @@ namespace UnstackDecks
                             "UnstackDecks => Inventory doesn't have space to place the next div card.");
                         yield break;
                     }
+                    //DebugWindow.LogMsg($"{openSlotPos} ");
                     //right click the stackdeck stack aka PickUpCard()
                     yield return Input.SetCursorPositionAndClick(slotRectCenter, Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right, Settings.TimeBetweenClicks);
                     //check if MouseInventory contains an item and waits for it
                     yield return new WaitFunctionTimed(() => GameController.IngameState.IngameUi.Cursor.ChildCount == 1, true);
+
                     if (Settings.DropToGround)
                     {
                         yield return Input.SetCursorPositionAndClick(GameController.Window.GetWindowRectangle().Center, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+                    }
+                    else if (Settings.DropToDivTab)
+                    {
+                        if(GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.IsVisible &&
+                            GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.InvType == InventoryType.DivinationStash)
+                        {
+                            yield return Input.SetCursorPositionAndClick(GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.GetClientRect().Center, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+                        }
+                        else
+                        {
+                            LogMessage("Stash not open or Current Tab not a DivinationTab",15,Color.Yellow);
+                        }
                     }
                     else
                     {
@@ -248,7 +262,7 @@ namespace UnstackDecks
                     
                     //wait for item to be dropped off
                     yield return new WaitFunctionTimed(() => GameController.IngameState.IngameUi.Cursor.ChildCount == 0, true);
-                    if(!Settings.DropToGround) yield return MarkSlotUsed(openSlotPos);
+                    if(!Settings.DropToGround && !Settings.DropToDivTab) yield return MarkSlotUsed(openSlotPos);
 
                     --stackSize;
                     ++_CoroutineIterations;

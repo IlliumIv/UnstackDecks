@@ -16,6 +16,7 @@ namespace UnstackDecks
             PreserveOriginalCursorPosition = new ToggleNode(false);
             ReverseMouseButtons = new ToggleNode(false);
             DropToGround = new ToggleNode(false);
+            DropToDivTab = new ToggleNode(false);
         }
 
         [Menu("Enable", "Enables listening for hotkey to unstack.")]
@@ -31,5 +32,6 @@ namespace UnstackDecks
         [Menu("Reverse mouse buttons", "Right-click to unstack is the default. If you have left-handed mouse, use this.")]
         public ToggleNode ReverseMouseButtons { get; set; }
         public ToggleNode DropToGround { get; set; }
+        public ToggleNode DropToDivTab { get; set; }
     }
 }
