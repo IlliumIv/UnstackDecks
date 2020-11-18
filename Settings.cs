@@ -12,7 +12,6 @@ namespace UnstackDecks
             Enable = new ToggleNode(true);
             UnstackHotkey = Keys.F1;
             TimeBetweenClicks = new RangeNode<int>(20, 20, 200);
-            MouseSpeed = new RangeNode<float>(1, 0.1f, 2);
             PreserveOriginalCursorPosition = new ToggleNode(false);
             ReverseMouseButtons = new ToggleNode(false);
             DropToGround = new ToggleNode(false);
