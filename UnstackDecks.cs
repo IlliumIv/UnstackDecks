@@ -122,6 +122,7 @@ namespace UnstackDecks
             _UnstackCoroutine?.Done();
             _DebugTimer.Restart();
             _DebugTimer.Stop();
+            _UnstackCoroutine = null;
         }
 
         private void ParseInventory()
@@ -203,7 +204,7 @@ namespace UnstackDecks
                 if (!Settings.DropToGround && !Settings.DropToDivTab) yield return MarkSlotUsed(openSlotPos);
                 //update item and the stacksize more safely
                 //find the item by invslot
-                item = GameController.IngameState.ServerData.PlayerInventories[0].Inventory.InventorySlotItems.ToList().Find(x => x.InventoryPosition == invSlot);
+                item = GameController.IngameState.ServerData.PlayerInventories[0].Inventory.InventorySlotItems.ToList().Find(x => x.InventoryPosition == invSlot); //the item object is rebuilt completely by the game after removing a card from the stack
                 yield return new WaitFunctionTimed(() => item.Item.HasComponent<Stack>() == true);  //the game doesnt seem to like it when you unstack too fast and gives ingame chat error messages. The caching of the stacksize and simply decrementing brought other problems
                 if (!item.Item.HasComponent<Stack>())
                 {
