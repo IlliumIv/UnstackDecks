@@ -125,7 +125,7 @@ namespace UnstackDecks
             _UnstackCoroutine?.Done();
             _DebugTimer.Stop();
             _UnstackCoroutine = null;
-            LogMessage($"{openedDecksCounter} were opened in {_DebugTimer.ElapsedMilliseconds}: {_DebugTimer.ElapsedMilliseconds / openedDecksCounter} ms per Card at {Settings.TimeBetweenClicks.Value} ms between Clicks Setting", 10);
+            LogMessage($"{openedDecksCounter} were opened in {_DebugTimer.ElapsedMilliseconds} ms: {_DebugTimer.ElapsedMilliseconds / openedDecksCounter} ms per Card at {Settings.TimeBetweenClicks.Value} ms between Clicks Setting", 10);
             _DebugTimer.Reset();
         }
 
