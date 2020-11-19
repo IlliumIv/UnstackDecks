@@ -18,6 +18,7 @@ namespace UnstackDecks
     public class UnstackDecks : BaseSettingsPlugin<UnstackDecksSettings>
     {
         private readonly Stopwatch _DebugTimer = Stopwatch.StartNew();
+        private uint openedDecksCounter = 0;
         private int[,] _InventoryLayout;
         private Queue<ServerInventory.InventSlotItem> _SlotsWithStackedDecks;
         private RectangleF _InventoryRect;
@@ -56,6 +57,8 @@ namespace UnstackDecks
                 if (_UnstackCoroutine == null)
                 {
                     _UnstackCoroutine = new Coroutine(UnstackDecksRoutine(), this, Name);
+                    _DebugTimer.Start();
+                    openedDecksCounter = 0;
                     Core.ParallelRunner.Run(_UnstackCoroutine);
                 }
                 else
@@ -120,9 +123,10 @@ namespace UnstackDecks
         {
             _UnstackCoroutine = Core.ParallelRunner.FindByName(Name);
             _UnstackCoroutine?.Done();
-            _DebugTimer.Restart();
             _DebugTimer.Stop();
             _UnstackCoroutine = null;
+            LogMessage($"{openedDecksCounter} were opened in {_DebugTimer.ElapsedMilliseconds}: {_DebugTimer.ElapsedMilliseconds / openedDecksCounter} ms per Card at {Settings.TimeBetweenClicks.Value} ms between Clicks Setting", 10);
+            _DebugTimer.Reset();
         }
 
         private void ParseInventory()
@@ -163,6 +167,7 @@ namespace UnstackDecks
             var openSlotPos = Point.Zero;
             var stacksize = item.Item.GetComponent<Stack>()?.Size ?? 0;
             var slotRectCenter = item.GetClientRect().Center;
+            var cursorInv = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
             while (stacksize > 0)
             {
                 //check profile requirements
@@ -182,7 +187,7 @@ namespace UnstackDecks
                 //right click the stackdeck stack
                 yield return Input.SetCursorPositionAndClick(slotRectCenter, Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right, Settings.TimeBetweenClicks);
                 //check if MouseInventory contains an item and waits for it
-                yield return new WaitFunctionTimed(() => GameController.IngameState.IngameUi.Cursor.ChildCount == 1, true);
+                yield return new WaitFunctionTimed(() => cursorInv.TotalItemsCounts == 1, true);
 
                 Vector2 destination;
                 if (Settings.DropToGround)
@@ -200,7 +205,8 @@ namespace UnstackDecks
                 }
                 yield return Input.SetCursorPositionAndClick(destination, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
                 //wait for item on cursor to be dropped off
-                yield return new WaitFunctionTimed(() => GameController.IngameState.IngameUi.Cursor.ChildCount == 0, true);
+                yield return new WaitFunctionTimed(() => cursorInv.TotalItemsCounts == 0, true);
+                openedDecksCounter++;
                 if (!Settings.DropToGround && !Settings.DropToDivTab) yield return MarkSlotUsed(openSlotPos);
                 //update item and the stacksize more safely
                 //find the item by invslot
