@@ -18,7 +18,8 @@ namespace UnstackDecks
     public class UnstackDecks : BaseSettingsPlugin<UnstackDecksSettings>
     {
         private readonly Stopwatch _DebugTimer = Stopwatch.StartNew();
-        private uint openedDecksCounter = 0;
+        private int currDecksInInventory = 0;
+        private int startDecksInInventory = 0;
         private int[,] _InventoryLayout;
         private Queue<ServerInventory.InventSlotItem> _SlotsWithStackedDecks;
         private RectangleF _InventoryRect;
@@ -57,8 +58,8 @@ namespace UnstackDecks
                 if (_UnstackCoroutine == null)
                 {
                     _UnstackCoroutine = new Coroutine(UnstackDecksRoutine(), this, Name);
+                    _DebugTimer.Reset();
                     _DebugTimer.Start();
-                    openedDecksCounter = 0;
                     Core.ParallelRunner.Run(_UnstackCoroutine);
                 }
                 else
@@ -72,19 +73,26 @@ namespace UnstackDecks
         }
         private IEnumerator UnstackDecksRoutine()
         {
-            //int tries = 3;
             if (!areRequirementsMet())
             {
                 StopCoroutine();
                 yield break;
             }
-            while (haveStackedDecks())
+            int tries = 0;
+            initStatistics();
+            while (haveStackedDecks() && tries < 3)
             {
                 ParseInventory();
+                tries++;
                 yield return PopTheStacks();
-                //tries++;
             }
             StopCoroutine();
+        }
+
+        private void initStatistics()
+        {
+            startDecksInInventory = GameController.Game.IngameState.ServerData.PlayerInventories[0].Inventory.Items.
+                Where(x => x.Path == "Metadata/Items/DivinationCards/DivinationCardDeck").Sum(x => x.GetComponent<Stack>()?.Size ?? 0);
         }
 
         /// <summary>
@@ -118,17 +126,32 @@ namespace UnstackDecks
         {
             return GameController.IngameState.ServerData.PlayerInventories[0].Inventory.Items.Where(x => x.Path == "Metadata/Items/DivinationCards/DivinationCardDeck").Count() > 0;
         }
-
+        /// <summary>
+        /// Stops the Coroutine, Debugtimer and resets it and also Logs a Statistic Message containing Informations about opened Cards, total time spent and time spent per Unit.
+        /// </summary>
         private void StopCoroutine()
         {
             _UnstackCoroutine = Core.ParallelRunner.FindByName(Name);
             _UnstackCoroutine?.Done();
             _DebugTimer.Stop();
             _UnstackCoroutine = null;
-            LogMessage($"{openedDecksCounter} were opened in {_DebugTimer.ElapsedMilliseconds} ms: {_DebugTimer.ElapsedMilliseconds / openedDecksCounter} ms per Card at {Settings.TimeBetweenClicks.Value} ms between Clicks Setting", 10);
+            LogStatistic();
             _DebugTimer.Reset();
         }
 
+        private void LogStatistic()
+        {
+            ParseInventory();
+            var openedDecks = startDecksInInventory - currDecksInInventory;
+            if(openedDecks > 0)
+            {
+                LogMessage($"{openedDecks} were opened in {_DebugTimer.ElapsedMilliseconds} ms: {_DebugTimer.ElapsedMilliseconds / openedDecks} ms per Card at {Settings.TimeBetweenClicks.Value} ms between Clicks Setting", 10);
+            }
+        }
+
+        /// <summary>
+        /// Parses the Inventory for stacked Decks and marks used slots in the inventory
+        /// </summary>
         private void ParseInventory()
         {
             try
@@ -142,6 +165,7 @@ namespace UnstackDecks
                 
                 _SlotsWithStackedDecks = new Queue<ServerInventory.InventSlotItem>(playerInventory.InventorySlotItems.Where(slot =>
                     slot.Item.Path == "Metadata/Items/DivinationCards/DivinationCardDeck").ToList().OrderBy(x => x.InventoryPosition.X).ThenBy(x => x.InventoryPosition.Y).ToList());
+                currDecksInInventory = _SlotsWithStackedDecks.Sum(x => x.Item.GetComponent<Stack>()?.Size ?? 0);
             }   
             catch (Exception ex)
             {
@@ -151,12 +175,9 @@ namespace UnstackDecks
 
         private IEnumerator PopTheStacks()
         {
-            //DebugWindow.LogError("Test in PopTheStacks", 5);
             while(_SlotsWithStackedDecks.Count() > 0)
             {
-                //DebugWindow.LogError($"PopTheStacks: {_SlotsWithStackedDecks.Peek()}", 5);
                 yield return PopAStack(_SlotsWithStackedDecks.Dequeue());
-                //yield return _Wait1ms;
             }
         }
 
@@ -168,6 +189,8 @@ namespace UnstackDecks
             var stacksize = item.Item.GetComponent<Stack>()?.Size ?? 0;
             var slotRectCenter = item.GetClientRect().Center;
             var cursorInv = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
+            int latency = (int) GameController.IngameState.CurLatency;
+            int maxWaitTime = Settings.maxWatitTime.Value;
             while (stacksize > 0)
             {
                 //check profile requirements
@@ -181,44 +204,70 @@ namespace UnstackDecks
                 }
                 else if (!areRequirementsMet())
                 {
+                    LogError("Requirements not met!");
                     StopCoroutine();
                     yield break;
                 }
-                //right click the stackdeck stack
+                //click the stackdeck stack
                 yield return Input.SetCursorPositionAndClick(slotRectCenter, Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right, Settings.TimeBetweenClicks);
-                //check if MouseInventory contains an item and waits for it
-                yield return new WaitFunctionTimed(() => cursorInv.TotalItemsCounts == 1, true);
 
-                Vector2 destination;
-                if (Settings.DropToGround)
+                //check if MouseInventory contains an item and waits for it
+                yield return new WaitFunctionTimed(() => cursorInv.CountItems > 0, true, maxWaitTime);
+                if (cursorInv.TotalItemsCounts == 0)
                 {
-                    destination = GameController.Window.GetWindowRectangle().Center;
+                    //LogError("Cursorinventory not filled");
+                    //StopCoroutine();
+                    yield break;
                 }
-                else if (Settings.DropToDivTab)
-                {
-                    destination = GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.GetClientRectCache.Center;
-                }
-                else
-                {
-                    //drop off the item from cursor at free inventory slot
-                    destination = GetClientRectFromPoint(openSlotPos, 1, 1).Center;
-                }
-                yield return Input.SetCursorPositionAndClick(destination, Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+                    
+                //click at the dropoff location
+                yield return Input.SetCursorPositionAndClick(chooseDestination(openSlotPos), Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+
                 //wait for item on cursor to be dropped off
-                yield return new WaitFunctionTimed(() => cursorInv.TotalItemsCounts == 0, true);
-                openedDecksCounter++;
+                yield return new WaitFunctionTimed(() => cursorInv.CountItems == 0, true, maxWaitTime);
+                if (cursorInv.TotalItemsCounts != 0)
+                {
+                    //LogError("Cursorinventory not empty");
+                    //StopCoroutine();
+                    yield break;
+                }
                 if (!Settings.DropToGround && !Settings.DropToDivTab) yield return MarkSlotUsed(openSlotPos);
                 //update item and the stacksize more safely
                 //find the item by invslot
                 item = GameController.IngameState.ServerData.PlayerInventories[0].Inventory.InventorySlotItems.ToList().Find(x => x.InventoryPosition == invSlot); //the item object is rebuilt completely by the game after removing a card from the stack
-                yield return new WaitFunctionTimed(() => item.Item.HasComponent<Stack>() == true);  //the game doesnt seem to like it when you unstack too fast and gives ingame chat error messages. The caching of the stacksize and simply decrementing brought other problems
+                yield return new WaitFunctionTimed(() => item.Item.HasComponent<Stack>(), true, maxWaitTime);  //the game doesnt seem to like it when you unstack too fast and gives ingame chat error messages. The caching of the stacksize and simply decrementing brought other problems
                 if (!item.Item.HasComponent<Stack>())
                 {
-                    StopCoroutine();
+                    //LogError("No Stack component of current item found");
+                    //StopCoroutine();
                     yield break;
                 }
                 stacksize = item.Item.GetComponent<Stack>().Size;
             }
+        }
+
+        private void handlingFail()
+        {
+            throw new NotImplementedException();
+        }
+
+        private Vector2 chooseDestination(Point openSlotPos)
+        {
+            Vector2 destination;
+            if (Settings.DropToGround)
+            {
+                destination = GameController.Window.GetWindowRectangle().Center;
+            }
+            else if (Settings.DropToDivTab)
+            {
+                destination = GameController.Game.IngameState.IngameUi.StashElement.VisibleStash.GetClientRectCache.Center;
+            }
+            else
+            {
+                //drop off the item from cursor at free inventory slot
+                destination = GetClientRectFromPoint(openSlotPos, 1, 1).Center;
+            }
+            return destination;
         }
         #region Helperfunctions
         private static int[,] GetInventoryLayout(IEnumerable<ServerInventory.InventSlotItem> slots)
