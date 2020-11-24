@@ -25,7 +25,6 @@ namespace UnstackDecks
         private RectangleF _InventoryRect;
         private float _CellSize;
         private readonly WaitTime _Wait1ms = new WaitTime(1);
-        private Coroutine _UnstackCoroutine;
         private uint _CoroutineIterations;
 
         public UnstackDecks()
@@ -48,6 +47,11 @@ namespace UnstackDecks
                 Input.RegisterKey(Settings.UnstackHotkey);
                 _SaveSettings();
             };
+            Settings.TurnInDivCardsHotkey.OnValueChanged += () =>
+            {
+                Input.RegisterKey(Settings.TurnInDivCardsHotkey);
+                _SaveSettings();
+            };
             return true;
         }
 
@@ -55,27 +59,55 @@ namespace UnstackDecks
         {
             if (Settings.UnstackHotkey.PressedOnce())
             {
-                if (_UnstackCoroutine == null)
+                if (Core.ParallelRunner.FindByName(Name) == null)
                 {
-                    _UnstackCoroutine = new Coroutine(UnstackDecksRoutine(), this, Name);
-                    _DebugTimer.Reset();
-                    _DebugTimer.Start();
-                    Core.ParallelRunner.Run(_UnstackCoroutine);
+                    StartCoroutine(Routines.OpenStackedDecksRoutine);
+                }
+                else 
+                {
+                    StopCoroutine(Name);
+                }
+            }
+            else if (Settings.TurnInDivCardsHotkey.PressedOnce())
+            {
+                DebugWindow.LogMsg("Turn in Div Cards not yet implemented");
+                return null;
+
+                if (Core.ParallelRunner.FindByName("TurnInvDivCards") == null)
+                {
+                    StartCoroutine(Routines.DivCardTurnInRoutine);
                 }
                 else
                 {
-                    //stopping the plugin when hotkey is pressed during action
-                    StopCoroutine();
-                    _UnstackCoroutine = null;
+                    StopCoroutine("TurnInDivCards");
                 }
             }
             return null;
         }
+
+        private void StartCoroutine(Routines routine)
+        {
+            switch (routine)
+            {
+                case Routines.OpenStackedDecksRoutine:
+                    _DebugTimer.Reset();
+                    _DebugTimer.Start();
+                    Core.ParallelRunner.Run(new Coroutine(UnstackDecksRoutine(), this, Name));
+                    break;
+
+                case Routines.DivCardTurnInRoutine:
+                    _DebugTimer.Reset();
+                    _DebugTimer.Start();
+                    Core.ParallelRunner.Run(new Coroutine(TurnInDivCardsRoutine(), this, "TurnInDivCards"));
+                    break;
+            }
+        }
+       
         private IEnumerator UnstackDecksRoutine()
         {
             if (!areRequirementsMet())
             {
-                StopCoroutine();
+                StopCoroutine(Name);
                 yield break;
             }
             int tries = 0;
@@ -86,7 +118,33 @@ namespace UnstackDecks
                 tries++;
                 yield return PopTheStacks();
             }
-            StopCoroutine();
+            StopCoroutine(Name);
+        }
+        private IEnumerator TurnInDivCardsRoutine()
+        {
+            if (!areRequirementsMet())
+            {
+                StopCoroutine("TurnInDivCards");
+                yield break;
+            }
+            int tries = 0;
+            initStatistics();
+            while (HaveDivCardSets() && tries < 3)
+            {
+                ParseInventory();
+                tries++;
+                yield return PopTheStacks();
+            }
+            StopCoroutine("TurnInDivCards");
+        }
+
+        private bool HaveDivCardSets()
+        {
+            return GameController.IngameState.ServerData.PlayerInventories[0].Inventory.Items.Where(x =>
+                x.Metadata.StartsWith("Metadata/Items/DivinationCards/") &&
+                !x.Metadata.StartsWith("Metadata/Items/DivinationCards/DivinationCardDeck") &&
+                x.HasComponent<Stack>() &&
+                x.GetComponent<Stack>().FullStack).ToList().Count > 0;
         }
 
         private void initStatistics()
@@ -129,12 +187,11 @@ namespace UnstackDecks
         /// <summary>
         /// Stops the Coroutine, Debugtimer and resets it and also Logs a Statistic Message containing Informations about opened Cards, total time spent and time spent per Unit.
         /// </summary>
-        private void StopCoroutine()
+        private void StopCoroutine(string routineName)
         {
-            _UnstackCoroutine = Core.ParallelRunner.FindByName(Name);
-            _UnstackCoroutine?.Done();
+            var routine = Core.ParallelRunner.FindByName(routineName);
+            routine?.Done();
             _DebugTimer.Stop();
-            _UnstackCoroutine = null;
             LogStatistic();
             _DebugTimer.Reset();
         }
@@ -172,7 +229,7 @@ namespace UnstackDecks
                 LogError($"{ex}");
             }
         }
-
+        #region Unstack Stacked Decks
         private IEnumerator PopTheStacks()
         {
             while(_SlotsWithStackedDecks.Count() > 0)
@@ -190,7 +247,7 @@ namespace UnstackDecks
             var slotRectCenter = item.GetClientRect().Center;
             var cursorInv = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
             int latency = (int) GameController.IngameState.CurLatency;
-            int maxWaitTime = Settings.maxWatitTime.Value;
+            int maxWaitTime = Settings.MaxWatitTime.Value;
             while (stacksize > 0)
             {
                 //check profile requirements
@@ -198,14 +255,14 @@ namespace UnstackDecks
                 {
                     DebugWindow.LogError(
                         "UnstackDecks => Inventory doesn't have space to place the next div card.");
-                    StopCoroutine();
+                    StopCoroutine(Name);
                     yield break;
 
                 }
                 else if (!areRequirementsMet())
                 {
                     LogError("Requirements not met!");
-                    StopCoroutine();
+                    StopCoroutine(Name);
                     yield break;
                 }
                 //click the stackdeck stack
@@ -269,6 +326,7 @@ namespace UnstackDecks
             }
             return destination;
         }
+        #endregion
         #region Helperfunctions
         private static int[,] GetInventoryLayout(IEnumerable<ServerInventory.InventSlotItem> slots)
         {
@@ -302,6 +360,17 @@ namespace UnstackDecks
         {
             _InventoryLayout.Fill(1, slotPosition);
             yield return _Wait1ms;
+        }
+
+        /// <summary>
+        /// Checks if any of the possible Coroutines of this Plugin area currently running in any shape or form
+        /// </summary>
+        /// <returns>boolean</returns>
+        private bool AnyCoroutineRunning()
+        {
+            if (Core.ParallelRunner.FindByName(Name) != null) return true;
+            if (Core.ParallelRunner.FindByName("TurnInDivCards") != null) return true;
+            return false;
         }
         #endregion
     }
