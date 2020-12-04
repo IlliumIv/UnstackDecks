@@ -144,7 +144,8 @@ namespace UnstackDecks
                 x.Metadata.StartsWith("Metadata/Items/DivinationCards/") &&
                 !x.Metadata.StartsWith("Metadata/Items/DivinationCards/DivinationCardDeck") &&
                 x.HasComponent<Stack>() &&
-                x.GetComponent<Stack>().FullStack).ToList().Count > 0;
+                (x.GetComponent<Stack>().Info.MaxStackSize == x.GetComponent<Stack>().Size)).ToList().Count > 0;
+                // x.GetComponent<Stack>().FullStack).ToList().Count > 0;
         }
 
         private void initStatistics()
