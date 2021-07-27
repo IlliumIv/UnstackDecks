@@ -247,7 +247,7 @@ namespace UnstackDecks
             var stacksize = item.Item.GetComponent<Stack>()?.Size ?? 0;
             var slotRectCenter = item.GetClientRect().Center;
             var cursorInv = GameController.Game.IngameState.ServerData.PlayerInventories[12].Inventory;
-            int latency = (int) GameController.IngameState.CurLatency;
+            int latency = (int) GameController.IngameState.ServerData.Latency;
             int maxWaitTime = Settings.MaxWatitTime.Value;
             while (stacksize > 0)
             {
