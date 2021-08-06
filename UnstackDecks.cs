@@ -267,7 +267,7 @@ namespace UnstackDecks
                     yield break;
                 }
                 //click the stackdeck stack
-                yield return Input.SetCursorPositionAndClick(slotRectCenter, Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right, Settings.TimeBetweenClicks);
+                yield return InputExtension.SetCursorPositionAndClick(slotRectCenter, Settings.ReverseMouseButtons ? MouseButtons.Left : MouseButtons.Right, Settings.TimeBetweenClicks);
 
                 //check if MouseInventory contains an item and waits for it
                 yield return new WaitFunctionTimed(() => cursorInv.CountItems > 0, true, maxWaitTime);
@@ -279,7 +279,7 @@ namespace UnstackDecks
                 }
                     
                 //click at the dropoff location
-                yield return Input.SetCursorPositionAndClick(chooseDestination(openSlotPos), Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
+                yield return InputExtension.SetCursorPositionAndClick(chooseDestination(openSlotPos), Settings.ReverseMouseButtons ? MouseButtons.Right : MouseButtons.Left, Settings.TimeBetweenClicks);
 
                 //wait for item on cursor to be dropped off
                 yield return new WaitFunctionTimed(() => cursorInv.CountItems == 0, true, maxWaitTime);
